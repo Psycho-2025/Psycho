@@ -123,7 +123,7 @@
     </div>
   </div>
 
-  <!-- Firebase SDK (Updated Modular Version) -->
+  <!-- Firebase SDK -->
   <script type="module">
     // Import Firebase modules
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
@@ -138,60 +138,65 @@
       serverTimestamp 
     } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-    // Audio Manager
-    const AudioManager = {
-      sounds: {},
+    // ==================== RELIABLE SOUND SYSTEM ====================
+    const SoundSystem = {
       audioContext: null,
-      initialized: false,
-
+      sounds: {},
+      
       init() {
-        if (this.initialized) return;
-        
         try {
-          // Create audio context
           this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-          
-          // Load sounds
-          this.sounds.send = this.createSound('https://assets.mixkit.co/sfx/preview/mixkit-message-pop-alert-2354.mp3');
-          this.sounds.receive = this.createSound('https://assets.mixkit.co/sfx/preview/mixkit-software-interface-start-2574.mp3');
-          
-          this.initialized = true;
-          console.log('Audio initialized');
+          this.createSounds();
         } catch (e) {
-          console.error('Audio initialization failed:', e);
+          console.error("Audio init error:", e);
         }
       },
-
-      createSound(url) {
-        const sound = new Audio(url);
-        sound.load();
-        return sound;
+      
+      createSounds() {
+        // Send sound (high pitch beep)
+        this.sounds.send = this.createBeep(800, 0.1);
+        // Receive sound (low pitch beep)
+        this.sounds.receive = this.createBeep(400, 0.15);
       },
-
-      play(soundName) {
-        if (!this.initialized || !this.sounds[soundName]) return;
-        
-        try {
-          // Ensure audio context is resumed
-          if (this.audioContext.state === 'suspended') {
-            this.audioContext.resume();
-          }
+      
+      createBeep(frequency, duration) {
+        return () => {
+          const osc = this.audioContext.createOscillator();
+          const gain = this.audioContext.createGain();
           
-          // Clone and play the sound to allow multiple overlapping plays
-          const clone = this.sounds[soundName].cloneNode();
-          clone.play().catch(e => console.log('Audio play failed:', e));
-        } catch (e) {
-          console.error('Error playing sound:', e);
+          osc.connect(gain);
+          gain.connect(this.audioContext.destination);
+          
+          osc.type = "sine";
+          osc.frequency.value = frequency;
+          gain.gain.value = 0.3;
+          
+          const now = this.audioContext.currentTime;
+          osc.start(now);
+          osc.stop(now + duration);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+        };
+      },
+      
+      play(name) {
+        if (this.sounds[name]) {
+          try {
+            if (this.audioContext.state === 'suspended') {
+              this.audioContext.resume();
+            }
+            this.sounds[name]();
+          } catch (e) {
+            console.error("Sound play error:", e);
+          }
         }
       }
     };
+    
+    // Initialize on first user interaction
+    document.addEventListener('click', () => SoundSystem.init(), { once: true });
+    // ==================== END SOUND SYSTEM ====================
 
-    // Initialize audio on first user interaction
-    document.addEventListener('click', () => {
-      AudioManager.init();
-    }, { once: true });
-
-    // Your Firebase config
+    // Firebase config
     const firebaseConfig = {
       apiKey: "AIzaSyD7KxzDYBJnH90bRxVjVrdy35Gm_ZOGxug",
       authDomain: "psycho-71dc6.firebaseapp.com",
@@ -206,18 +211,6 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    // Make Firebase methods available globally
-    window.firebase = {
-      db,
-      ref,
-      push,
-      onValue,
-      set,
-      remove,
-      onDisconnect,
-      serverTimestamp
-    };
-
     // User passwords
     const userPasswords = {
       "Abdullah": "abd123",
@@ -230,9 +223,9 @@
 
     let currentUser = null;
     let typingTimeout;
-    let onlineUsers = {};
     let userStatusRef;
     let isWindowActive = true;
+    let lastMessageId = null;
 
     // Initialize the app
     document.addEventListener('DOMContentLoaded', () => {
@@ -248,53 +241,39 @@
       document.getElementById('logoutBtn').addEventListener('click', handleLogout);
       document.getElementById('sendBtn').addEventListener('click', sendMessage);
       document.getElementById('messageInput').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-          sendMessage();
-        }
+        if (e.key === 'Enter') sendMessage();
       });
       
       // Typing indicator
       document.getElementById('messageInput').addEventListener('input', () => {
         if (!currentUser) return;
         
-        // Notify others that user is typing
         set(ref(db, `typing/${currentUser.name}`), true);
         
-        // Clear previous timeout
         if (typingTimeout) clearTimeout(typingTimeout);
-        
-        // Set timeout to remove typing indicator after 2 seconds of inactivity
         typingTimeout = setTimeout(() => {
           set(ref(db, `typing/${currentUser.name}`), false);
         }, 2000);
       });
 
-      // Visibility change listener for online status
+      // Visibility change listeners
       document.addEventListener('visibilitychange', handleVisibilityChange);
       window.addEventListener('focus', handleWindowFocus);
       window.addEventListener('blur', handleWindowBlur);
     });
 
     function handleVisibilityChange() {
-      if (document.hidden) {
-        handleWindowBlur();
-      } else {
-        handleWindowFocus();
-      }
+      document.hidden ? handleWindowBlur() : handleWindowFocus();
     }
 
     function handleWindowFocus() {
       isWindowActive = true;
-      if (currentUser && userStatusRef) {
-        set(userStatusRef, true);
-      }
+      if (currentUser && userStatusRef) set(userStatusRef, true);
     }
 
     function handleWindowBlur() {
       isWindowActive = false;
-      if (currentUser && userStatusRef) {
-        set(userStatusRef, false);
-      }
+      if (currentUser && userStatusRef) set(userStatusRef, false);
     }
 
     function handleLogin() {
@@ -316,23 +295,15 @@
         isAdmin: userName === 'Admin'
       };
       
-      // Save user to localStorage to keep them logged in
       localStorage.setItem('messengerUser', JSON.stringify(currentUser));
-      
-      // Start the chat session
       startChatSession();
     }
 
     function handleLogout() {
       if (currentUser) {
-        // Set user offline
         set(ref(db, `online/${currentUser.name}`), false);
-        
-        // Clear current user
         currentUser = null;
         localStorage.removeItem('messengerUser');
-        
-        // Hide chat interface and show login form
         document.getElementById('chatInterface').classList.add('hidden');
         document.getElementById('loginForm').classList.remove('hidden');
         document.getElementById('userInfo').classList.add('hidden');
@@ -340,24 +311,17 @@
     }
 
     function startChatSession() {
-      // Update UI
       document.getElementById('loginForm').classList.add('hidden');
       document.getElementById('chatInterface').classList.remove('hidden');
       document.getElementById('userInfo').classList.remove('hidden');
       document.getElementById('currentUserName').textContent = currentUser.name;
       
-      // Set user online status
       userStatusRef = ref(db, `online/${currentUser.name}`);
       set(userStatusRef, true);
-      
-      // Set up onDisconnect to mark user as offline when they disconnect
       onDisconnect(userStatusRef).set(false);
       
-      // Load users and messages
       loadUsers();
       loadMessages();
-      
-      // Set up listeners for real-time updates
       setupRealtimeListeners();
     }
 
@@ -376,43 +340,28 @@
         `;
         userList.appendChild(li);
         
-        // Check initial online status
         onValue(ref(db, `online/${user}`), (snapshot) => {
           const isOnline = snapshot.val();
-          updateUserStatus(user, isOnline);
+          document.getElementById(`status-${user}`).className = `online-dot ${isOnline ? 'online' : 'offline'}`;
         });
       });
     }
 
-    function updateUserStatus(user, isOnline) {
-      const statusDot = document.getElementById(`status-${user}`);
-      if (statusDot) {
-        statusDot.classList.remove(isOnline ? 'offline' : 'online');
-        statusDot.classList.add(isOnline ? 'online' : 'offline');
-      }
-    }
-
     function loadMessages() {
-      let lastMessageId = null;
-      
       onValue(ref(db, 'messages'), (snapshot) => {
         const messages = snapshot.val() || {};
         displayMessages(messages);
         
-        // Play sound for new received messages (not sent by current user)
-        if (currentUser && messages) {
-          const messageIds = Object.keys(messages);
-          const latestMessageId = messageIds[messageIds.length - 1];
-          
-          if (latestMessageId && latestMessageId !== lastMessageId) {
-            const latestMessage = messages[latestMessageId];
-            
-            if (latestMessage.sender !== currentUser.name) {
-              AudioManager.play('receive');
-            }
-            
-            lastMessageId = latestMessageId;
+        // Play receive sound for new messages from others
+        const messageIds = Object.keys(messages);
+        const latestMessageId = messageIds[messageIds.length - 1];
+        
+        if (latestMessageId && latestMessageId !== lastMessageId) {
+          const latestMessage = messages[latestMessageId];
+          if (latestMessage.sender !== currentUser.name) {
+            SoundSystem.play('receive');
           }
+          lastMessageId = latestMessageId;
         }
       });
     }
@@ -437,12 +386,10 @@
         messagesContainer.appendChild(messageDiv);
       });
       
-      // Scroll to bottom
       messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
 
     function setupRealtimeListeners() {
-      // Typing indicators
       onValue(ref(db, 'typing'), (snapshot) => {
         const typingStatus = snapshot.val() || {};
         const typingUsers = Object.entries(typingStatus)
@@ -476,18 +423,10 @@
         messageInput.value = '';
         
         // Play send sound
-        AudioManager.play('send');
+        SoundSystem.play('send');
         
         // Clear typing indicator
         set(ref(db, `typing/${currentUser.name}`), false);
-      }
-    }
-
-    function deleteMessage(messageId) {
-      if (currentUser && currentUser.isAdmin) {
-        if (confirm('Are you sure you want to delete this message?')) {
-          remove(ref(db, `messages/${messageId}`));
-        }
       }
     }
 
@@ -497,8 +436,13 @@
       return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
 
-    // Make deleteMessage available globally for button clicks
-    window.deleteMessage = deleteMessage;
+    window.deleteMessage = function(messageId) {
+      if (currentUser && currentUser.isAdmin) {
+        if (confirm('Are you sure you want to delete this message?')) {
+          remove(ref(db, `messages/${messageId}`));
+        }
+      }
+    };
   </script>
 </body>
 </html>

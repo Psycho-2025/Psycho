@@ -3,33 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ChatApp</title>
+  <title>Group Chat</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
   <style>
-    /* View Management */
-    .view-container {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      display: none;
-      background: white;
-      overflow-y: auto;
-      z-index: 100;
-    }
-    .view-container.active {
-      display: block;
-    }
-    body > *:not(.active) {
-      display: none !important;
-    }
-
-    /* Chat Styles */
-    .chat-list-item.active { background-color: #f3f4f6; }
     .message-sent {
       background-color: #3b82f6;
       color: white;
@@ -62,15 +41,14 @@
   </style>
 </head>
 <body class="bg-gray-100">
-  <!-- Auth View Container -->
-  <div id="authView" class="view-container active">
-    <div class="max-w-md mx-auto p-6">
+  <!-- Auth View -->
+  <div id="authView" class="fixed inset-0 bg-white flex items-center justify-center">
+    <div class="max-w-md w-full p-6">
       <div class="bg-white rounded-lg shadow-md p-6">
         <div class="text-center mb-8">
-          <h1 class="text-3xl font-bold text-blue-600">ChatApp</h1>
+          <h1 class="text-3xl font-bold text-blue-600">Group Chat</h1>
         </div>
         
-        <!-- Login Form -->
         <div id="loginForm">
           <h2 class="text-2xl font-semibold mb-6 text-center">Login</h2>
           
@@ -101,60 +79,42 @@
     </div>
   </div>
   
-  <!-- Chat View Container -->
-  <div id="chatView" class="view-container">
-    <div class="max-w-6xl mx-auto h-full flex bg-white">
-      <!-- Sidebar -->
-      <div class="w-1/4 border-r border-gray-200 bg-gray-50 flex flex-col">
-        <div class="p-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 class="text-xl font-semibold">Chats</h2>
-          <div class="flex items-center space-x-2">
-            <button id="showNewChatBtn" class="p-2 rounded-full hover:bg-gray-200">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
-              </svg>
-            </button>
-            <button id="showProfileBtn" class="p-2 rounded-full hover:bg-gray-200">
-              <img id="currentUserPic" src="https://via.placeholder.com/40" alt="Profile" class="profile-pic">
-            </button>
-          </div>
-        </div>
-        <div id="chatList" class="flex-1 overflow-y-auto"></div>
+  <!-- Chat View -->
+  <div id="chatView" class="hidden max-w-4xl mx-auto h-screen flex flex-col bg-white">
+    <!-- Header -->
+    <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+      <div class="flex items-center">
+        <img id="currentUserPic" src="https://via.placeholder.com/40" alt="Profile" class="profile-pic mr-3">
+        <h2 class="text-xl font-semibold">Group Chat</h2>
       </div>
-      
-      <!-- Main Chat Area -->
-      <div class="flex-1 flex flex-col">
-        <div id="chatHeader" class="p-4 border-b border-gray-200 flex items-center">
-          <img id="chatPic" src="https://via.placeholder.com/40" alt="Chat" class="profile-pic mr-3">
-          <div>
-            <h3 id="chatName" class="font-semibold">Select a chat</h3>
-            <p id="chatStatus" class="text-sm text-gray-500">Offline</p>
-          </div>
-        </div>
-        <div id="messagesContainer">
-          <div id="noChatSelected" class="text-center text-gray-500 mt-20">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-            </svg>
-            <p class="mt-4 text-lg">Select a chat to start messaging</p>
-          </div>
-        </div>
-        <div class="p-4 border-t border-gray-200 mt-auto">
-          <div class="flex items-center">
-            <input type="text" id="messageInput" placeholder="Type a message..." class="flex-1 p-2 border rounded-l" disabled>
-            <button id="sendBtn" class="bg-blue-600 text-white p-2 rounded-r hover:bg-blue-700" disabled>
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
-              </svg>
-            </button>
-          </div>
-        </div>
+      <div class="text-sm text-gray-500">Online</div>
+    </div>
+    
+    <!-- Messages -->
+    <div id="messagesContainer" class="flex-1 overflow-y-auto">
+      <div id="welcomeMessage" class="text-center text-gray-500 mt-20">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+        </svg>
+        <p class="mt-4 text-lg">Welcome to the group chat!</p>
+      </div>
+    </div>
+    
+    <!-- Input -->
+    <div class="p-4 border-t border-gray-200">
+      <div class="flex items-center">
+        <input type="text" id="messageInput" placeholder="Type a message..." class="flex-1 p-2 border rounded-l">
+        <button id="sendBtn" class="bg-blue-600 text-white p-2 rounded-r hover:bg-blue-700">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+          </svg>
+        </button>
       </div>
     </div>
   </div>
 
   <script>
-    // ===== Firebase Configuration =====
+    // Firebase Configuration
     const firebaseConfig = {
       apiKey: "AIzaSyCP-_djBJABa62VaMNumNiTcHC78amyYlE",
       authDomain: "psycho-3bf6c.firebaseapp.com",
@@ -169,7 +129,7 @@
     firebase.initializeApp(firebaseConfig);
     const database = firebase.database();
 
-    // ===== User Credentials =====
+    // User Credentials
     const userPasswords = {
       "Abdullah": "pass1234",
       "Noman": "noman5678",
@@ -178,15 +138,10 @@
       "Yusha": "yusha3456"
     };
 
-    // ===== View Management =====
-    function showView(viewId) {
-      document.querySelectorAll('.view-container').forEach(view => {
-        view.classList.remove('active');
-      });
-      document.getElementById(viewId).classList.add('active');
-    }
+    // Global Variables
+    let currentUser = "";
 
-    // ===== Authentication =====
+    // Authentication
     document.getElementById('loginBtn').addEventListener('click', () => {
       const username = document.getElementById('userSelect').value;
       const password = document.getElementById('loginPassword').value;
@@ -198,78 +153,46 @@
       }
       
       if (userPasswords[username] === password) {
-        // Successful login
-        errorElement.textContent = "";
-        showView('chatView');
-        initializeChat(username);
+        currentUser = username;
+        document.getElementById('currentUserPic').src = `https://ui-avatars.com/api/?name=${username}&background=random`;
+        document.getElementById('authView').classList.add('hidden');
+        document.getElementById('chatView').classList.remove('hidden');
+        loadMessages();
       } else {
         errorElement.textContent = "Incorrect password";
       }
     });
 
-    // ===== Chat Functions =====
-    let currentUser = "";
-    let currentChatId = null;
-
-    function initializeChat(username) {
-      currentUser = username;
-      document.getElementById('currentUserPic').src = `https://ui-avatars.com/api/?name=${username}&background=random`;
-      loadChats();
-    }
-
-    function loadChats() {
-      database.ref('chats').on('value', snapshot => {
-        const chatList = document.getElementById('chatList');
-        chatList.innerHTML = '';
-        const chats = snapshot.val();
+    // Chat Functions
+    function loadMessages() {
+      database.ref('groupMessages').orderByChild('timestamp').on('value', snapshot => {
+        const messagesContainer = document.getElementById('messagesContainer');
+        messagesContainer.innerHTML = '';
+        document.getElementById('welcomeMessage').style.display = 'none';
         
-        if (chats) {
-          Object.entries(chats).forEach(([chatId, chatData]) => {
-            const chatItem = document.createElement('div');
-            chatItem.className = 'p-3 border-b border-gray-200 flex items-center hover:bg-gray-100 cursor-pointer chat-list-item';
-            chatItem.dataset.chatId = chatId;
-            
-            chatItem.innerHTML = `
-              <img src="https://ui-avatars.com/api/?name=${chatData.name}&background=random" alt="${chatData.name}" class="profile-pic mr-3">
-              <div>
-                <h4 class="font-medium">${chatData.name}</h4>
-                <p class="text-sm text-gray-500 truncate">${chatData.lastMessage || 'No messages yet'}</p>
-              </div>
-            `;
-            
-            chatItem.addEventListener('click', () => openChat(chatId, chatData));
-            chatList.appendChild(chatItem);
-          });
-        }
-      });
-    }
-
-    function openChat(chatId, chatData) {
-      currentChatId = chatId;
-      document.getElementById('noChatSelected').style.display = 'none';
-      document.getElementById('chatName').textContent = chatData.name;
-      document.getElementById('chatPic').src = `https://ui-avatars.com/api/?name=${chatData.name}&background=random`;
-      
-      const messagesContainer = document.getElementById('messagesContainer');
-      messagesContainer.innerHTML = '';
-      
-      database.ref('messages/' + chatId).orderByChild('timestamp').on('value', snapshot => {
         const messages = snapshot.val();
         if (messages) {
           Object.entries(messages).forEach(([messageId, message]) => {
             const messageDiv = document.createElement('div');
             messageDiv.className = message.sender === currentUser ? 'message-sent' : 'message-received';
-            messageDiv.textContent = message.text;
+            
+            const senderSpan = document.createElement('span');
+            senderSpan.className = 'text-xs font-semibold block mb-1';
+            senderSpan.textContent = message.sender;
+            
+            const textDiv = document.createElement('div');
+            textDiv.textContent = message.text;
+            
+            messageDiv.appendChild(senderSpan);
+            messageDiv.appendChild(textDiv);
             messagesContainer.appendChild(messageDiv);
           });
           messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
       });
-      
-      document.getElementById('messageInput').disabled = false;
-      document.getElementById('sendBtn').disabled = false;
     }
 
+    // Send Message
     document.getElementById('sendBtn').addEventListener('click', sendMessage);
     document.getElementById('messageInput').addEventListener('keypress', (e) => {
       if (e.key === 'Enter') sendMessage();
@@ -278,26 +201,20 @@
     function sendMessage() {
       const messageInput = document.getElementById('messageInput');
       const text = messageInput.value.trim();
-      if (text && currentChatId) {
+      if (text && currentUser) {
         const message = {
           text: text,
           sender: currentUser,
           timestamp: firebase.database.ServerValue.TIMESTAMP
         };
         
-        database.ref('messages/' + currentChatId).push(message)
+        database.ref('groupMessages').push(message)
           .then(() => {
             messageInput.value = '';
-            database.ref('chats/' + currentChatId).update({
-              lastMessage: text
-            });
           })
           .catch(console.error);
       }
     }
-
-    // ===== Initialize =====
-    showView('authView');
   </script>
 </body>
 </html>

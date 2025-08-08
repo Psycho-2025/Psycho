@@ -138,6 +138,59 @@
       serverTimestamp 
     } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
+    // Audio Manager
+    const AudioManager = {
+      sounds: {},
+      audioContext: null,
+      initialized: false,
+
+      init() {
+        if (this.initialized) return;
+        
+        try {
+          // Create audio context
+          this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          
+          // Load sounds
+          this.sounds.send = this.createSound('https://assets.mixkit.co/sfx/preview/mixkit-message-pop-alert-2354.mp3');
+          this.sounds.receive = this.createSound('https://assets.mixkit.co/sfx/preview/mixkit-software-interface-start-2574.mp3');
+          
+          this.initialized = true;
+          console.log('Audio initialized');
+        } catch (e) {
+          console.error('Audio initialization failed:', e);
+        }
+      },
+
+      createSound(url) {
+        const sound = new Audio(url);
+        sound.load();
+        return sound;
+      },
+
+      play(soundName) {
+        if (!this.initialized || !this.sounds[soundName]) return;
+        
+        try {
+          // Ensure audio context is resumed
+          if (this.audioContext.state === 'suspended') {
+            this.audioContext.resume();
+          }
+          
+          // Clone and play the sound to allow multiple overlapping plays
+          const clone = this.sounds[soundName].cloneNode();
+          clone.play().catch(e => console.log('Audio play failed:', e));
+        } catch (e) {
+          console.error('Error playing sound:', e);
+        }
+      }
+    };
+
+    // Initialize audio on first user interaction
+    document.addEventListener('click', () => {
+      AudioManager.init();
+    }, { once: true });
+
     // Your Firebase config
     const firebaseConfig = {
       apiKey: "AIzaSyD7KxzDYBJnH90bRxVjVrdy35Gm_ZOGxug",
@@ -178,6 +231,8 @@
     let currentUser = null;
     let typingTimeout;
     let onlineUsers = {};
+    let userStatusRef;
+    let isWindowActive = true;
 
     // Initialize the app
     document.addEventListener('DOMContentLoaded', () => {
@@ -213,7 +268,34 @@
           set(ref(db, `typing/${currentUser.name}`), false);
         }, 2000);
       });
+
+      // Visibility change listener for online status
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      window.addEventListener('focus', handleWindowFocus);
+      window.addEventListener('blur', handleWindowBlur);
     });
+
+    function handleVisibilityChange() {
+      if (document.hidden) {
+        handleWindowBlur();
+      } else {
+        handleWindowFocus();
+      }
+    }
+
+    function handleWindowFocus() {
+      isWindowActive = true;
+      if (currentUser && userStatusRef) {
+        set(userStatusRef, true);
+      }
+    }
+
+    function handleWindowBlur() {
+      isWindowActive = false;
+      if (currentUser && userStatusRef) {
+        set(userStatusRef, false);
+      }
+    }
 
     function handleLogin() {
       const userName = document.getElementById('userSelect').value;
@@ -265,7 +347,7 @@
       document.getElementById('currentUserName').textContent = currentUser.name;
       
       // Set user online status
-      const userStatusRef = ref(db, `online/${currentUser.name}`);
+      userStatusRef = ref(db, `online/${currentUser.name}`);
       set(userStatusRef, true);
       
       // Set up onDisconnect to mark user as offline when they disconnect
@@ -311,9 +393,27 @@
     }
 
     function loadMessages() {
+      let lastMessageId = null;
+      
       onValue(ref(db, 'messages'), (snapshot) => {
-        const messages = snapshot.val() || [];
+        const messages = snapshot.val() || {};
         displayMessages(messages);
+        
+        // Play sound for new received messages (not sent by current user)
+        if (currentUser && messages) {
+          const messageIds = Object.keys(messages);
+          const latestMessageId = messageIds[messageIds.length - 1];
+          
+          if (latestMessageId && latestMessageId !== lastMessageId) {
+            const latestMessage = messages[latestMessageId];
+            
+            if (latestMessage.sender !== currentUser.name) {
+              AudioManager.play('receive');
+            }
+            
+            lastMessageId = latestMessageId;
+          }
+        }
       });
     }
 
@@ -375,6 +475,9 @@
         push(ref(db, 'messages'), newMessage);
         messageInput.value = '';
         
+        // Play send sound
+        AudioManager.play('send');
+        
         // Clear typing indicator
         set(ref(db, `typing/${currentUser.name}`), false);
       }
@@ -399,4 +502,3 @@
   </script>
 </body>
 </html>
-

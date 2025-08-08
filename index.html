@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChatApp</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+  <style>
+    /* View Management */
+    .view-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: none;
+      background-color: #f3f4f6;
+    }
+    .view-container.active {
+      display: block;
+    }
+
+    /* Chat Styles */
+    .chat-list-item.active {
+      background-color: #e5e7eb;
+    }
+    .message-sent {
+      background-color: #3b82f6;
+      color: white;
+      align-self: flex-end;
+      border-radius: 18px 18px 0 18px;
+      max-width: 70%;
+      padding: 10px 15px;
+      margin: 5px 0;
+    }
+    .message-received {
+      background-color: #e5e7eb;
+      align-self: flex-start;
+      border-radius: 18px 18px 18px 0;
+      max-width: 70%;
+      padding: 10px 15px;
+      margin: 5px 0;
+    }
+    .profile-pic {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+    #messagesContainer {
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+      height: calc(100vh - 150px);
+      overflow-y: auto;
+    }
+    #newChatModal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.5);
+      z-index: 100;
+    }
+    .modal-content {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      width: 90%;
+      max-width: 400px;
+      margin: 100px auto;
+    }
+  </style>
+</head>
+<body>
+  <!-- Auth View -->
+  <div id="authView" class="view-container active">
+    <div class="max-w-md mx-auto mt-10 p-6 bg-white rounded-lg shadow-md">
+      <div class="text-center mb-8">
+        <h1 class="text-3xl font-bold text-blue-600">ChatApp</h1>
+      </div>
+      
+      <!-- Login Form -->
+      <div id="loginForm">
+        <h2 class="text-2xl font-semibold mb-6 text-center">Login</h2>
+        <div class="mb-4">
+          <label class="block text-gray-700 mb-2">Email</label>
+          <input type="email" id="loginEmail" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div class="mb-6">
+          <label class="block text-gray-700 mb-2">Password</label>
+          <input type="password" id="loginPassword" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500">
+        </div>
+        <button id="loginBtn" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 mb-4">
+          Login
+        </button>
+        <p class="text-center text-gray-600">
+          Don't have an account? 
+          <button id="showSignupBtn" class="text-blue-600 font-medium hover:underline">Sign up</button>
+        </p>
+        <p id="authError" class="text-red-500 mt-4 text-center"></p>
+      </div>
+      
+      <!-- Signup Form -->
+      <div id="signupForm" class="hidden">
+        <h2 class="text-2xl font-semibold mb-6 text-center">Create Account</h2>
+        <div class="mb-4">
+          <label class="block text-gray-700 mb-2">Name</label>
+          <input type="text" id="signupName" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div class="mb-4">
+          <label class="block text-gray-700 mb-2">Email</label>
+          <input type="email" id="signupEmail" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div class="mb-6">
+          <label class="block text-gray-700 mb-2">Password</label>
+          <input type="password" id="signupPassword" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500">
+        </div>
+        <button id="signupBtn" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 mb-4">
+          Sign up
+        </button>
+        <p class="text-center text-gray-600">
+          Already have an account? 
+          <button id="showLoginBtn" class="text-blue-600 font-medium hover:underline">Login</button>
+        </p>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Chat View -->
+  <div id="chatView" class="view-container">
+    <div class="max-w-6xl mx-auto bg-white rounded-lg shadow-md h-screen flex overflow-hidden">
+      <!-- Sidebar -->
+      <div class="w-1/4 border-r border-gray-200 bg-gray-50 flex flex-col">
+        <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+          <h2 class="text-xl font-semibold">Chats</h2>
+          <div class="flex items-center space-x-2">
+            <button id="showNewChatBtn" class="p-2 rounded-full hover:bg-gray-200">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+              </svg>
+            </button>
+            <button id="showProfileBtn" class="p-2 rounded-full hover:bg-gray-200">
+              <img id="currentUserPic" src="https://via.placeholder.com/40" alt="Profile" class="profile-pic">
+            </button>
+          </div>
+        </div>
+        
+        <!-- Chat List -->
+        <div id="chatList" class="flex-1 overflow-y-auto">
+          <!-- Dynamic content will be added here -->
+        </div>
+      </div>
+      
+      <!-- Main Chat Area -->
+      <div class="flex-1 flex flex-col">
+        <div id="chatHeader" class="p-4 border-b border-gray-200 flex items-center">
+          <img id="chatPic" src="https://via.placeholder.com/40" alt="Chat" class="profile-pic mr-3">
+          <div>
+            <h3 id="chatName" class="font-semibold">Select a chat</h3>
+            <p id="chatStatus" class="text-sm text-gray-500">Offline</p>
+          </div>
+        </div>
+        
+        <div id="messagesContainer">
+          <div id="noChatSelected" class="text-center text-gray-500 mt-20">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            <p class="mt-4 text-lg">Select a chat to start messaging</p>
+          </div>
+        </div>
+        
+        <div class="p-4 border-t border-gray-200">
+          <div class="flex items-center">
+            <input type="text" id="messageInput" placeholder="Type a message..." 
+                  class="flex-1 p-2 border rounded-l focus:ring-2 focus:ring-blue-500" disabled>
+            <button id="sendBtn" class="bg-blue-600 text-white p-2 rounded-r hover:bg-blue-700" disabled>
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Profile View -->
+  <div id="profileView" class="view-container">
+    <div class="max-w-md mx-auto mt-10 p-6 bg-white rounded-lg shadow-md">
+      <h2 class="text-2xl font-semibold mb-6 text-center">Your Profile</h2>
+      
+      <div class="text-center mb-6">
+        <img id="profilePreview" src="https://via.placeholder.com/120" alt="Profile" 
+            class="w-32 h-32 rounded-full mx-auto border-4 border-blue-100">
+      </div>
+      
+      <div class="mb-4">
+        <label class="block text-gray-700 mb-2">Change Profile Picture</label>
+        <input type="file" id="profilePicture" accept="image/*" class="w-full p-2 border rounded">
+      </div>
+      
+      <div class="mb-4">
+        <label class="block text-gray-700 mb-2">Name</label>
+        <input type="text" id="profileName" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500">
+      </div>
+      
+      <div class="mb-4">
+        <label class="block text-gray-700 mb-2">Email</label>
+        <input type="email" id="profileEmail" class="w-full p-2 border rounded bg-gray-100" disabled>
+      </div>
+      
+      <div class="flex space-x-2 mt-6">
+        <button id="saveProfileBtn" class="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700">
+          Save Changes
+        </button>
+        <button id="cancelProfileBtn" class="flex-1 bg-gray-200 text-gray-800 py-2 rounded hover:bg-gray-300">
+          Cancel
+        </button>
+      </div>
+      
+      <div class="mt-6 pt-4 border-t border-gray-200">
+        <button id="logoutBtn" class="w-full bg-red-600 text-white py-2 rounded hover:bg-red-700">
+          Logout
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- New Chat Modal -->
+  <div id="newChatModal">
+    <div class="modal-content">
+      <h3 class="text-lg font-semibold mb-4">Start New Chat</h3>
+      <div class="mb-4">
+        <label class="block text-gray-700 mb-2">Search Users</label>
+        <input type="text" id="userSearch" class="w-full p-2 border rounded" placeholder="Search by email">
+      </div>
+      <div id="searchResults" class="mb-4 max-h-40 overflow-y-auto border rounded hidden"></div>
+      <div class="flex justify-end space-x-2">
+        <button id="cancelChatBtn" class="px-4 py-2 border rounded hover:bg-gray-100">Cancel</button>
+        <button id="createChatBtn" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Firebase configuration - Replace with your actual config
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_AUTH_DOMAIN",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_STORAGE_BUCKET",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID",
+      databaseURL: "YOUR_DATABASE_URL"
+    };
+    
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const database = firebase.database();
+    const storage = firebase.storage();
+    
+    // View Management
+    function showView(viewId) {
+      // Hide all views
+      document.querySelectorAll('.view-container').forEach(view => {
+        view.classList.remove('active');
+      });
+      
+      // Show the requested view
+      document.getElementById(viewId).classList.add('active');
+      
+      // Reset forms when showing auth view
+      if (viewId === 'authView') {
+        document.getElementById('loginForm').classList.remove('hidden');
+        document.getElementById('signupForm').classList.add('hidden');
+        document.getElementById('loginEmail').value = '';
+        document.getElementById('loginPassword').value = '';
+        document.getElementById('signupName').value = '';
+        document.getElementById('signupEmail').value = '';
+        document.getElementById('signupPassword').value = '';
+        document.getElementById('authError').textContent = '';
+      }
+      
+      // Reset chat view when showing it
+      if (viewId === 'chatView') {
+        document.getElementById('noChatSelected').style.display = 'block';
+        document.getElementById('messageInput').disabled = true;
+        document.getElementById('sendBtn').disabled = true;
+      }
+    }
+    
+    // Toggle between login and signup forms
+    document.getElementById('showLoginBtn').addEventListener('click', () => {
+      document.getElementById('loginForm').classList.remove('hidden');
+      document.getElementById('signupForm').classList.add('hidden');
+      document.getElementById('authError').textContent = '';
+    });
+    
+    document.getElementById('showSignupBtn').addEventListener('click', () => {
+      document.getElementById('loginForm').classList.add('hidden');
+      document.getElementById('signupForm').classList.remove('hidden');
+      document.getElementById('authError').textContent = '';
+    });
+    
+    // Authentication Functions
+    document.getElementById('loginBtn').addEventListener('click', () => {
+      const email = document.getElementById('loginEmail').value;
+      const password = document.getElementById('loginPassword').value;
+      
+      auth.signInWithEmailAndPassword(email, password)
+        .catch(error => {
+          document.getElementById('authError').textContent = error.message;
+        });
+    });
+    
+    document.getElementById('signupBtn').addEventListener('click', () => {
+      const name = document.getElementById('signupName').value;
+      const email = document.getElementById('signupEmail').value;
+      const password = document.getElementById('signupPassword').value;
+      
+      auth.createUserWithEmailAndPassword(email, password)
+        .then(userCredential => {
+          // Save user profile
+          return database.ref('users/' + userCredential.user.uid).set({
+            name: name,
+            email: email,
+            profilePic: 'https://via.placeholder.com/40'
+          });
+        })
+        .catch(error => {
+          document.getElementById('authError').textContent = error.message;
+        });
+    });
+    
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+      auth.signOut();
+    });
+    
+    // Auth state listener
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        // User is signed in
+        showView('chatView');
+        loadUserProfile(user.uid);
+        loadChats(user.uid);
+      } else {
+        // User is signed out
+        showView('authView');
+      }
+    });
+    
+    // Load user profile
+    function loadUserProfile(userId) {
+      database.ref('users/' + userId).once('value')
+        .then(snapshot => {
+          const user = snapshot.val();
+          if (user) {
+            document.getElementById('profileName').value = user.name || '';
+            document.getElementById('profileEmail').value = user.email || '';
+            document.getElementById('profilePreview').src = user.profilePic || 'https://via.placeholder.com/120';
+            document.getElementById('currentUserPic').src = user.profilePic || 'https://via.placeholder.com/40';
+          }
+        });
+    }
+    
+    // Chat Functions
+    document.getElementById('showNewChatBtn').addEventListener('click', () => {
+      document.getElementById('newChatModal').style.display = 'block';
+    });
+    
+    document.getElementById('cancelChatBtn').addEventListener('click', () => {
+      document.getElementById('newChatModal').style.display = 'none';
+    });
+    
+    // Close modal when clicking outside
+    window.addEventListener('click', (e) => {
+      if (e.target === document.getElementById('newChatModal')) {
+        document.getElementById('newChatModal').style.display = 'none';
+      }
+    });
+    
+    // Load chats for user
+    function loadChats(userId) {
+      database.ref('user-chats/' + userId).on('value', snapshot => {
+        const chatList = document.getElementById('chatList');
+        chatList.innerHTML = '';
+        const chats = snapshot.val();
+        
+        if (chats) {
+          Object.entries(chats).forEach(([chatId, chatData]) => {
+            const chatItem = document.createElement('div');
+            chatItem.className = 'p-3 border-b border-gray-200 flex items-center hover:bg-gray-100 cursor-pointer chat-list-item';
+            chatItem.dataset.chatId = chatId;
+            
+            chatItem.innerHTML = `
+              <img src="${chatData.photoURL || 'https://via.placeholder.com/40'}" alt="${chatData.name}" class="profile-pic mr-3">
+              <div>
+                <h4 class="font-medium">${chatData.name}</h4>
+                <p class="text-sm text-gray-500 truncate">${chatData.lastMessage || 'No messages yet'}</p>
+              </div>
+            `;
+            
+            chatItem.addEventListener('click', () => {
+              document.querySelectorAll('.chat-list-item').forEach(item => {
+                item.classList.remove('active');
+              });
+              chatItem.classList.add('active');
+              openChat(chatId, chatData);
+            });
+            
+            chatList.appendChild(chatItem);
+          });
+        }
+      });
+    }
+    
+    // Open chat
+    function openChat(chatId, chatData) {
+      currentChatId = chatId;
+      document.getElementById('noChatSelected').style.display = 'none';
+      document.getElementById('chatName').textContent = chatData.name;
+      document.getElementById('chatPic').src = chatData.photoURL || 'https://via.placeholder.com/40';
+      
+      // Clear previous messages
+      const messagesContainer = document.getElementById('messagesContainer');
+      while (messagesContainer.firstChild) {
+        messagesContainer.removeChild(messagesContainer.firstChild);
+      }
+      
+      // Load messages
+      database.ref('messages/' + chatId).orderByChild('timestamp').on('value', snapshot => {
+        const messages = snapshot.val();
+        
+        if (messages) {
+          // Clear the container but keep the noChatSelected element
+          const noChatElement = document.getElementById('noChatSelected');
+          messagesContainer.innerHTML = '';
+          if (noChatElement) {
+            messagesContainer.appendChild(noChatElement);
+            noChatElement.style.display = 'none';
+          }
+          
+          Object.entries(messages).forEach(([messageId, message]) => {
+            addMessageToUI(message, message.sender === auth.currentUser.uid);
+          });
+          
+          // Scroll to bottom
+          messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+      });
+      
+      // Enable message input
+      document.getElementById('messageInput').disabled = false;
+      document.getElementById('sendBtn').disabled = false;
+      document.getElementById('messageInput').focus();
+    }
+    
+    // Add message to UI
+    function addMessageToUI(message, isCurrentUser) {
+      const messageDiv = document.createElement('div');
+      messageDiv.className = isCurrentUser ? 'message-sent' : 'message-received';
+      messageDiv.textContent = message.text;
+      document.getElementById('messagesContainer').appendChild(messageDiv);
+    }
+    
+    // Send message
+    document.getElementById('sendBtn').addEventListener('click', sendMessage);
+    document.getElementById('messageInput').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        sendMessage();
+      }
+    });
+    
+    function sendMessage() {
+      const messageInput = document.getElementById('messageInput');
+      const text = messageInput.value.trim();
+      if (text && currentChatId) {
+        const message = {
+          text: text,
+          sender: auth.currentUser.uid,
+          timestamp: firebase.database.ServerValue.TIMESTAMP
+        };
+        
+        // Push message to database
+        database.ref('messages/' + currentChatId).push(message)
+          .then(() => {
+            messageInput.value = '';
+            
+            // Update last message in chat
+            return database.ref('user-chats/' + auth.currentUser.uid + '/' + currentChatId).update({
+              lastMessage: text
+            });
+          })
+          .catch(error => {
+            console.error('Error sending message:', error);
+          });
+      }
+    }
+    
+    // Profile picture preview
+    document.getElementById('profilePicture').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          document.getElementById('profilePreview').src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+    
+    // Save profile
+    document.getElementById('saveProfileBtn').addEventListener('click', () => {
+      const userId = auth.currentUser.uid;
+      const name = document.getElementById('profileName').value;
+      const file = document.getElementById('profilePicture').files[0];
+      
+      if (file) {
+        const storageRef = storage.ref('profile-pictures/' + userId);
+        storageRef.put(file)
+          .then(snapshot => {
+            return snapshot.ref.getDownloadURL();
+          })
+          .then(url => {
+            return database.ref('users/' + userId).update({
+              name: name,
+              profilePic: url
+            });
+          })
+          .then(() => {
+            showView('chatView');
+          })
+          .catch(error => {
+            console.error('Error updating profile:', error);
+          });
+      } else {
+        database.ref('users/' + userId).update({
+          name: name
+        })
+        .then(() => {
+          showView('chatView');
+        })
+        .catch(error => {
+          console.error('Error updating profile:', error);
+        });
+      }
+    });
+    
+    // Cancel profile editing
+    document.getElementById('cancelProfileBtn').addEventListener('click', () => {
+      showView('chatView');
+    });
+    
+    // Show profile view
+    document.getElementById('showProfileBtn').addEventListener('click', () => {
+      showView('profileView');
+    });
+    
+    // Initialize the app
+    showView('authView');
+  </script>
+</body>
+</html>

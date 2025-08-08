@@ -126,7 +126,7 @@
             <!-- Messages will appear here -->
           </div>
           
-          <!-- Typing indicator (empty by default) -->
+          <!-- Typing indicator (completely removed the default text) -->
           <div id="typingIndicator" class="typing-indicator px-4 pb-2 hidden"></div>
           
           <!-- Message input -->
@@ -411,6 +411,9 @@
     }
 
     function setupRealtimeListeners() {
+      // Clear any existing typing data first
+      set(ref(db, 'typing'), {});
+      
       onValue(ref(db, 'typing'), (snapshot) => {
         const typingStatus = snapshot.val() || {};
         const typingUsers = Object.entries(typingStatus)
